@@ -7,38 +7,17 @@ import plotly.express as px
 from datetime import datetime
 
 # --- ELITE UI CONFIG ---
-st.set_page_config(page_title="QUANT-X TERMINAL", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="QUANT-X TERMINAL", layout="wide")
 
-# --- CUSTOM CSS FOR "BETTING CARD" LOOK ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    div.stButton > button:first-child {
-        background-color: #1e2130;
-        color: white;
-        border: 1px solid #3e445e;
-        border-radius: 10px;
-        height: 60px;
-        width: 100%;
-        font-size: 18px;
-        font-weight: bold;
-        transition: 0.3s;
-    }
-    div.stButton > button:hover {
-        border-color: #00ffcc;
-        color: #00ffcc;
-        background-color: #262a3d;
-    }
-    .metric-container {
-        background-color: #1e2130;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #3e445e;
-    }
+    .stButton > button { width: 100%; height: 50px; border-radius: 10px; }
+    .report-card { background-color: #1e2130; padding: 20px; border-radius: 15px; border: 1px solid #3e445e; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. DATA & BRAIN LOADING ---
+# --- ASSET LOADING ---
 @st.cache_resource
 def load_assets():
     models = ['result', 'goals', 'btts', 'corners']
@@ -56,108 +35,80 @@ def load_assets():
 
 brains, elo_ratings, team_stats, upcoming_matches = load_assets()
 
-# --- 2. SIDEBAR (PORTFOLIO) ---
-with st.sidebar:
-    st.title("🏦 WALLET")
-    wallet = st.selectbox("Wallet", ["Bybit (USDT)", "Telebirr (ETB)"])
-    balance = st.number_input("Balance", value=100.0 if wallet == "Bybit" else 5000.0)
-    st.divider()
-    st.info("Select a match from the main dashboard to begin analysis.")
+# --- HELPER: Naming Safety ---
+def get_team_data(name):
+    if name in team_stats: return team_stats[name]
+    # Try simple search if name varies (e.g. "Port Vale FC" vs "Port Vale")
+    for key in team_stats.keys():
+        if name in key or key in name: return team_stats[key]
+    return None
 
-# --- 3. MAIN DASHBOARD ---
+# --- MAIN UI ---
 st.title("🛡️ QUANT-X PRO TERMINAL")
-st.write(f"📅 Schedule for {datetime.now().strftime('%A, Dec %d')}")
 
-# Initialize Session State for selected match
-if 'home_team' not in st.session_state:
-    st.session_state.home_team = None
-    st.session_state.away_team = None
+# 1. FIXTURE GRID
+st.subheader("🏟️ Daily Schedule")
+if not upcoming_matches:
+    st.warning("No fixtures found. Please run the update script.")
 
-# --- MATCH GRID (THE CARDS) ---
-st.subheader("🏟️ Select Match to Analyze")
-cols = st.columns(2) # Create 2 columns for match cards
-
+cols = st.columns(3)
 for i, match in enumerate(upcoming_matches):
-    col_idx = i % 2
-    with cols[col_idx]:
-        # Professional Match Card Button
-        if st.button(f"⚽ {match['home']}  vs  {match['away']}", key=f"match_{i}"):
-            st.session_state.home_team = match['home']
-            st.session_state.away_team = match['away']
+    with cols[i % 3]:
+        if st.button(f"{match['home']} vs {match['away']}", key=f"m_{i}"):
+            st.session_state.selected_match = match
 
-# --- DYNAMICAL ANALYSIS SECTION ---
-if st.session_state.home_team:
-    h_team = st.session_state.home_team
-    a_team = st.session_state.away_team
+# 2. ANALYSIS
+if 'selected_match' in st.session_state:
+    m = st.session_state.selected_match
+    h_team, a_team = m['home'], m['away']
     
-    st.divider()
-    st.header(f"🔍 Deep Analysis: {h_team} vs {a_team}")
-    
-    # 1. RUN INFERENCE
-    h_snap = team_stats[h_team]
-    a_snap = team_stats[a_team]
-    
-    # 10-Feature Vector
-    feats = np.array([[
-        elo_ratings[h_team], elo_ratings[a_team],
-        h_snap['goals'], a_snap['goals'],
-        h_snap['corners'], a_snap['corners'],
-        h_snap['eff'], a_snap['eff'],
-        h_snap['btts'], a_snap['btts']
-    ]])
+    h_snap = get_team_data(h_team)
+    a_snap = get_team_data(a_team)
 
-    p_res = brains['result'].predict_proba(feats)[0] # [A, D, H]
-    p_goals = brains['goals'].predict_proba(feats)[0][1]
-    p_btts = brains['btts'].predict_proba(feats)[0][1]
-    p_corn = brains['corners'].predict_proba(feats)[0][1]
+    if not h_snap or not a_snap:
+        st.error(f"Data missing for {h_team} or {a_team}. Check naming in CSV.")
+    else:
+        # DATA PREP
+        feats = np.array([[
+            elo_ratings.get(h_team, 1500), elo_ratings.get(a_team, 1500),
+            h_snap['goals'], a_snap['goals'], h_snap['corners'], a_snap['corners'],
+            h_snap['eff'], a_snap['eff'], h_snap['btts'], a_snap['btts']
+        ]])
 
-    # 2. PROBABILITY TILES
-    col_a, col_b, col_c, col_d = st.columns(4)
-    with col_a: st.metric(f"🏠 {h_team}", f"{p_res[2]:.1%}")
-    with col_b: st.metric("⚖️ DRAW", f"{p_res[1]:.1%}")
-    with col_c: st.metric(f"🚀 {a_team}", f"{p_res[0]:.1%}")
-    with col_d: st.metric("⚽ BTTS", f"{p_btts:.1%}")
+        p_res = brains['result'].predict_proba(feats)[0] # [A, D, H]
+        p_goals = brains['goals'].predict_proba(feats)[0][1]
+        p_btts = brains['btts'].predict_proba(feats)[0][1]
+        p_corn = brains['corners'].predict_proba(feats)[0][1]
 
-    # 3. ADVANCED MARKETS (REAL USE)
-    st.subheader("📊 Professional Markets")
-    m1, m2, m3 = st.columns(3)
-    
-    with m1:
-        st.write("**Draw No Bet (DNB)**")
-        dnb_h = p_res[2] / (p_res[2] + p_res[0])
-        dnb_a = p_res[0] / (p_res[2] + p_res[0])
-        st.write(f"{h_team}: {dnb_h:.1%}")
-        st.write(f"{a_team}: {dnb_a:.1%}")
+        st.divider()
+        st.header(f"🔍 Analysis: {h_team} vs {a_team}")
 
-    with m2:
-        st.write("**Goal / Corner Pressure**")
-        st.write(f"Over 2.5 Goals: {p_goals:.1%}")
-        st.write(f"Over 9.5 Corners: {p_corn:.1%}")
+        # METRICS
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Home Win", f"{p_res[2]:.1%}")
+        c2.metric("Draw", f"{p_res[1]:.1%}")
+        c3.metric("Away Win", f"{p_res[0]:.1%}")
+        c4.metric("BTTS Yes", f"{p_btts:.1%}")
 
-    with m3:
-        st.write("**Suggested Stake**")
-        user_odds = st.number_input("Bookie Odds:", value=2.0, step=0.01)
-        # Simple Value Check
-        edge = (max(p_res) * user_odds) - 1
-        if edge > 0:
-            b = user_odds - 1
-            kelly = ((b * max(p_res)) - (1 - max(p_res))) / b
-            bet = (kelly / 8) * balance
-            st.success(f"Bet: {'$' if wallet == 'Bybit' else 'ETB'} {max(0.20, bet):.2f}")
+        # CHARTS
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            fig = px.pie(values=[p_res[2], p_res[1], p_res[0]], names=['Home', 'Draw', 'Away'], 
+                         hole=0.4, title="Win Probability", color_discrete_sequence=['#00ffcc', '#3e445e', '#ff4b4b'])
+            st.plotly_chart(fig, use_container_width=True)
+        with chart_col2:
+            st.write("### 📊 Pro Markets")
+            st.write(f"**Draw No Bet (DNB) {h_team}:** { (p_res[2]/(p_res[2]+p_res[0])):.1%}")
+            st.write(f"**Over 2.5 Goals:** {p_goals:.1%}")
+            st.write(f"**Over 9.5 Corners:** {p_corn:.1%}")
+
+        # VALUE CALC
+        st.sidebar.subheader("💰 Value Checker")
+        odds = st.sidebar.number_input("Bookie Odds", value=2.0)
+        edge = (max(p_res) * odds) - 1
+        if edge > 0.02:
+            st.sidebar.success(f"VALUE FOUND: {edge:.1%}")
+            # Kelly
+            st.sidebar.write(f"Suggested Bet: ${( ( (odds-1)*max(p_res) - (1-max(p_res)) ) / (odds-1) / 8) * 100:.2f}")
         else:
-            st.error("No Value detected.")
-
-    # 4. VOLATILITY CHART
-    st.write("### 📈 Match Momentum Chart")
-    fig = px.bar(x=['Win', 'Draw', 'Loss', 'BTTS', 'O2.5', 'Corners'], 
-                 y=[p_res[2], p_res[1], p_res[0], p_btts, p_goals, p_corn],
-                 labels={'x': 'Market', 'y': 'Probability'},
-                 color_discrete_sequence=['#00ffcc'])
-    st.plotly_chart(fig, use_container_width=True)
-
-    if st.button("❌ Close Analysis"):
-        st.session_state.home_team = None
-        st.rerun()
-
-else:
-    st.info("Welcome back, Yoni. Select a match from the cards above to see the AI scouting report.")
+            st.sidebar.error("No Value Detected")
