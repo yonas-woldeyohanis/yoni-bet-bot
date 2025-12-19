@@ -1,0 +1,12 @@
+[
+    {"id": 1, "home": "Stevenage", "away": "Burton"},
+    {"id": 2, "home": "Wigan", "away": "Blackpool"},
+    {"id": 3, "home": "Doncaster", "away": "Plymouth"},
+    {"id": 4, "home": "Exeter", "away": "Barnsley"},
+    {"id": 5, "home": "Leyton Orient", "away": "Bradford City"},
+    {"id": 6, "home": "Lincoln", "away": "Cardiff"},
+    {"id": 7, "home": "Mansfield", "away": "Stockport"},
+    {"id": 8, "home": "Port Vale", "away": "Peterborough"},
+    {"id": 9, "home": "Rotherham", "away": "Huddersfield"},
+    {"id": 10, "home": "Wycombe", "away": "Bolton"}
+]
