@@ -52,6 +52,26 @@ with st.sidebar:
     st.subheader("🎯 VALUE CALCULATOR")
     user_odds = st.number_input("Bookie Odds (1xBet/Telebirr):", value=2.0, step=0.01)
 
+
+# --- LIVE FIXTURE LOADER ---
+try:
+    with open('upcoming_matches.json', 'r') as f:
+        upcoming_data = json.load(f)
+except:
+    upcoming_data = []
+
+st.subheader("📅 Upcoming Live Fixtures")
+if upcoming_data:
+    selected_match_label = st.selectbox("Select a Match to Analyze", 
+        [f"{m['home']} vs {m['away']}" for m in upcoming_data])
+    
+    # Extract team names from selection
+    h_team, a_team = selected_match_label.split(" vs ")
+else:
+    st.warning("No live fixtures found. Run 12_live_fetcher.py")
+    h_team = st.selectbox("🏠 Manual Home", sorted(list(elo_ratings.keys())))
+    a_team = st.selectbox("🚀 Manual Away", sorted(list(elo_ratings.keys())))
+
 # --- 3. MAIN DASHBOARD ---
 st.title("🛡️ QUANT-X: PROFESSIONAL MATCH INTELLIGENCE")
 
@@ -128,6 +148,35 @@ if st.button("⚡ EXECUTE DYNAMICAL ANALYSIS"):
             values = [p_goals, p_corn, p_btts]
             fig2 = go.Figure(data=[go.Bar(x=categories, y=values, marker_color='#00ffcc')])
             st.plotly_chart(fig2, use_container_width=True)
+
+        st.subheader("🔍 Elite Market Analysis")
+        col_m1, col_m2 = st.columns(2)
+        
+        with col_m1:
+            st.write("**Goal Prediction**")
+            # Pro Tip: Over 1.5 is lower risk than Over 2.5
+            p_o15 = p_goals + 0.15 # Approximate O1.5 based on O2.5
+            st.metric("Over 1.5 Goals", f"{min(p_o15, 0.99):.1%}")
+            st.metric("BTTS (Yes)", f"{p_btts:.1%}")
+            
+        with col_m2:
+            st.write("**Pressure & Corners**")
+            st.metric("High Corner Pressure (>9.5)", f"{p_corn:.1%}")
+            # Individual team goal threat
+            h_threat = h_snap['goals'] * h_snap['eff']
+            st.write(f"🏠 {h_team} Threat Score: {h_threat:.2f}")
+
+        # --- THE PRO SUMMARY ---
+        st.divider()
+        if p_corn > 0.70 and p_goals > 0.60:
+            st.success("🔥 DYNAMICAL SIGNAL: High pressure match. Recommended Market: Over 8.5 Corners + Over 1.5 Goals.")
+        elif p_res[1] > 0.35:
+            st.info("⚖️ TIGHT MATCH: High Draw probability. Recommended: Draw No Bet (DNB) or Handicap (+0.5).")
+
+        
+
+
+        
 
         # --- VALUE CHECK ---
         edge = (max(p_res) * user_odds) - 1
