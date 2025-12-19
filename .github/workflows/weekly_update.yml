@@ -1,0 +1,16 @@
+name: Weekly Auto-Retrain
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Every Monday at midnight
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Update
+        run: |
+          python auto_update.py
+          git config --local user.email "bot@quant.com"
+          git add .
+          git commit -m "Weekly AI Retrain"
+          git push
