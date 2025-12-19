@@ -17,7 +17,8 @@ def train_elite_brains():
         'goals': 'Target_Over25',
         'btts': 'Target_BTTS',
         'home_o15': 'Target_Home_Over15',
-        'away_o15': 'Target_Away_Over15'
+        'away_o15': 'Target_Away_Over15',
+        'corners': 'Target_Corners10'
     }
 
     for name, target in targets.items():
