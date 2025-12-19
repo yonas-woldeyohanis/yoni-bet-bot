@@ -3,117 +3,145 @@ import pandas as pd
 import json
 import joblib
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 
-# --- CONFIG ---
-st.set_page_config(page_title="Elite Quant Analyst", layout="wide")
+# --- ELITE UI CONFIG ---
+st.set_page_config(page_title="QUANT-X TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
 # --- 1. THE BRAIN LOADING ---
 @st.cache_resource
 def load_all_brains():
-    models = ['result', 'goals', 'btts', 'home_o15', 'away_o15']
-    return {m: joblib.load(f'model_{m}.pkl') for m in models}
+    # These must match the filenames exactly as they appear on your GitHub
+    models = ['result', 'goals', 'btts', 'home_o15', 'away_o15', 'corners']
+    loaded_models = {}
+    for m in models:
+        try:
+            loaded_models[m] = joblib.load(f'model_{m}.pkl')
+        except:
+            st.error(f"Brain missing: model_{m}.pkl not found on GitHub!")
+    return loaded_models
 
+# Initialize brains and data
 brains = load_all_brains()
-with open('current_elo.json', 'r') as f:
-    elo = json.load(f)
-df_stats = pd.read_csv('elite_training_data.csv')
+
+# Load current Elo Ratings
+try:
+    with open('current_elo.json', 'r') as f:
+        elo_ratings = json.load(f)
+except FileNotFoundError:
+    st.error("Error: current_elo.json is missing. Please push it to GitHub.")
+
+# Load the Lightweight Team Stats Snapshot
+try:
+    with open('team_stats_snapshot.json', 'r') as f:
+        team_stats = json.load(f)
+except FileNotFoundError:
+    st.warning("Snapshot missing. Run '11_create_snapshot.py' and push 'team_stats_snapshot.json' to GitHub.")
 
 # --- 2. SIDEBAR (WALLET & TRACKER) ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/902/902581.png", width=100)
-    st.title("🏦 Pro Wallet Manager")
-    
-    # Wallet Balances
-    bybit_bal = st.number_input("Bybit Mastercard ($)", value=50.0, step=1.0)
-    telebirr_bal = st.number_input("Telebirr (ETB)", value=5000.0, step=100.0)
-    
-    active_wallet = st.selectbox("Active Wallet for Bet", ["Bybit", "Telebirr"])
-    current_funds = bybit_bal if active_wallet == "Bybit" else telebirr_bal
-    currency = "$" if active_wallet == "Bybit" else "ETB"
+    st.title("🏦 PORTFOLIO MANAGER")
+    wallet = st.selectbox("Betting Wallet", ["Bybit (USDT)", "Telebirr (ETB)", "Bank (CBE)"])
+    balance = st.number_input("Total Capital", value=100.0 if wallet == "Bybit" else 10000.0)
+    risk_level = st.slider("Risk Tolerance (1=Safe, 5=Aggressive)", 1, 5, 2)
+    currency = "$" if wallet == "Bybit" else "ETB"
 
     st.divider()
-    if st.button("📊 View Profit/Loss History"):
-        st.info("Performance tracking enabled. Logs saved to 'bet_history.csv'")
+    st.subheader("🎯 VALUE CALCULATOR")
+    user_odds = st.number_input("Bookie Odds (1xBet/Telebirr):", value=2.0, step=0.01)
 
-# --- 3. MAIN INTERFACE ---
-st.title("⚽ Dynamical Football Command Center")
+# --- 3. MAIN DASHBOARD ---
+st.title("🛡️ QUANT-X: PROFESSIONAL MATCH INTELLIGENCE")
 
-c1, c2 = st.columns(2)
-with c1:
-    h_team = st.selectbox("🏠 Home Team", sorted(list(elo.keys())))
-with c2:
-    a_team = st.selectbox("🚀 Away Team", sorted(list(elo.keys())))
+col_match1, col_match2 = st.columns(2)
+with col_match1:
+    h_team = st.selectbox("🏠 HOME SIDE", sorted(list(elo_ratings.keys())))
+with col_match2:
+    a_team = st.selectbox("🚀 AWAY SIDE", sorted(list(elo_ratings.keys())))
 
-if st.button("🔥 Run Professional Multi-Market Analysis"):
-    # Get Data
-    h_data = df_stats[df_stats['HomeTeam'] == h_team].iloc[-1]
-    a_data = df_stats[df_stats['AwayTeam'] == a_team].iloc[-1]
-    
-    # Feature Vector
-    feats = np.array([[elo[h_team], elo[a_team], h_data['H_Conv_Rate'], a_data['A_Conv_Rate'], h_data['Home_BTTS_Rate'], a_data['Away_BTTS_Rate']]])
-    
-    # Run Inference
-    p_res = brains['result'].predict_proba(feats)[0] # [A, D, H]
-    p_btts = brains['btts'].predict_proba(feats)[0][1]
-    p_goals = brains['goals'].predict_proba(feats)[0][1]
-    p_h15 = brains['home_o15'].predict_proba(feats)[0][1]
-    p_a15 = brains['away_o15'].predict_proba(feats)[0][1]
+if st.button("⚡ EXECUTE DYNAMICAL ANALYSIS"):
+    try:
+        # Get Stats from Snapshot
+        h_snap = team_stats[h_team]
+        a_snap = team_stats[a_team]
+        
+        # Build Feature Vector for AI
+        # Feature order: Elo_H, Elo_A, Conv_H, Conv_A, BTTS_H, BTTS_A
+        feats = np.array([[
+            elo_ratings[h_team], 
+            elo_ratings[a_team], 
+            h_snap['conv_rate'], 
+            a_snap['conv_rate'], 
+            h_snap['btts_rate'], 
+            a_snap['btts_rate']
+        ]])
 
-    # --- DISPLAY ANALYTICS ---
-    st.divider()
-    
-    t1, t2, t3 = st.tabs(["🎯 Probabilities", "📉 xG & Momentum", "💰 Value Betting"])
-    
-    with t1:
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric(f"{h_team} Win", f"{p_res[2]:.1%}")
-        col_b.metric("Draw", f"{p_res[1]:.1%}")
-        col_c.metric(f"{a_team} Win", f"{p_res[0]:.1%}")
-        
-        col_d, col_e, col_f = st.columns(3)
-        col_d.metric("Both Teams to Score", f"{p_btts:.1%}")
-        col_e.metric("Over 2.5 Goals", f"{p_goals:.1%}")
-        col_f.metric(f"{h_team} Over 1.5 Goals", f"{p_h15:.1%}")
+        # Multi-Model Inference
+        p_res = brains['result'].predict_proba(feats)[0]   # [Away, Draw, Home]
+        p_goals = brains['goals'].predict_proba(feats)[0][1]
+        p_btts = brains['btts'].predict_proba(feats)[0][1]
+        p_corn = brains['corners'].predict_proba(feats)[0][1]
 
-    with t2:
-        st.subheader("Dynamical Threat Levels (Quant-xG)")
-        # Calculate xG based on current conversion rates
-        h_xg = 5.5 * h_data['H_Conv_Rate'] # Assume 5.5 shots avg
-        a_xg = 5.5 * a_data['A_Conv_Rate']
-        
-        st.progress(min(h_xg/3, 1.0), text=f"{h_team} Expected Goals (xG): {h_xg:.2f}")
-        st.progress(min(a_xg/3, 1.0), text=f"{a_team} Expected Goals (xG): {a_xg:.2f}")
-        st.info("Teams with xG > 1.50 are considered 'High Offensive Threat'.")
+        # --- ROW 1: CORE PROBABILITIES ---
+        st.divider()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric(f"{h_team} Win", f"{p_res[2]:.1%}")
+        m2.metric("Draw (X)", f"{p_res[1]:.1%}")
+        m3.metric(f"{a_team} Win", f"{p_res[0]:.1%}")
+        m4.metric("BTTS: YES", f"{p_btts:.1%}")
 
-    with t3:
-        st.subheader("Calculated Value Bets")
+        # --- ROW 2: ADVANCED MARKETS ---
+        st.subheader("📊 ADVANCED PROFESSIONAL MARKETS")
+        c1, c2, c3 = st.columns(3)
         
-        # User inputs odds for the market they are interested in
-        market = st.selectbox("Select Market to Check Value", ["Match Result", "BTTS Yes", "Over 2.5 Goals", "Home Over 1.5"])
-        odds = st.number_input("Enter 1xBet/Telebirr Odds:", value=2.0, step=0.01)
+        with c1:
+            st.write("**Draw No Bet (DNB)**")
+            dnb_h = p_res[2] / (p_res[2] + p_res[0])
+            dnb_a = p_res[0] / (p_res[2] + p_res[0])
+            st.write(f"{h_team}: {dnb_h:.1%}")
+            st.write(f"{a_team}: {dnb_a:.1%}")
+
+        with c2:
+            st.write("**Double Chance**")
+            st.write(f"1X (Home/Draw): {(p_res[2] + p_res[1]):.1%}")
+            st.write(f"X2 (Away/Draw): {(p_res[0] + p_res[1]):.1%}")
+
+        with c3:
+            st.write("**Asian Handicap (AH 0.0)**")
+            ah_val = (elo_ratings[h_team] - elo_ratings[a_team]) / 100
+            st.write(f"Projected AH Line: {ah_val:+.2f}")
+
+        # --- ROW 3: VISUALIZATIONS ---
+        st.divider()
+        viz1, viz2 = st.columns(2)
         
-        # Determine probability based on selection
-        m_prob = 0
-        if market == "Match Result": m_prob = p_res[2]
-        if market == "BTTS Yes": m_prob = p_btts
-        if market == "Over 2.5 Goals": m_prob = p_goals
-        if market == "Home Over 1.5": m_prob = p_h15
-        
-        edge = (m_prob * odds) - 1
-        
+        with viz1:
+            st.write("### 📈 Winning Probability")
+            fig = px.pie(values=[p_res[2], p_res[1], p_res[0]], 
+                         names=['Home', 'Draw', 'Away'], 
+                         hole=.4,
+                         color_discrete_sequence=['#00cc96', '#636efa', '#ef553b'])
+            st.plotly_chart(fig, use_container_width=True)
+
+        with viz2:
+            st.write("### 🚩 Momentum & Volatility")
+            categories = ['Over 2.5 Goals', 'Over 9.5 Corners', 'BTTS']
+            values = [p_goals, p_corn, p_btts]
+            fig2 = go.Figure(data=[go.Bar(x=categories, y=values, marker_color='#00ffcc')])
+            st.plotly_chart(fig2, use_container_width=True)
+
+        # --- VALUE CHECK ---
+        edge = (max(p_res) * user_odds) - 1
         if edge > 0.05:
-            st.success(f"✅ VALUE DETECTED! Edge: {edge:.1%}")
-            # Kelly Criterion (1/8th for Professional Safety)
-            b = odds - 1
-            kelly = ((b * m_prob) - (1 - m_prob)) / b
-            bet_size = (kelly / 8) * current_funds
-            st.warning(f"💡 STRATEGY: Bet {currency}{bet_size:.2f} using {active_wallet}")
-            
-            if st.button("📝 Log this Bet to History"):
-                log_entry = f"{datetime.now()}, {h_team} vs {a_team}, {market}, {odds}, {bet_size}, {active_wallet}\n"
-                with open("bet_history.csv", "a") as f:
-                    f.write(log_entry)
-                st.balloons()
+            st.sidebar.success(f"PROFIT EDGE: {edge:.1%}")
+            b = user_odds - 1
+            kelly = ((b * max(p_res)) - (1 - max(p_res))) / b
+            bet_amt = (kelly / (10/risk_level)) * balance
+            st.sidebar.warning(f"💡 SUGGESTED BET: {currency}{max(0.20, bet_amt):.2f}")
         else:
-            st.error(f"❌ NO VALUE. (Edge: {edge:.1%}). The bookmaker's price is too low.")
+            st.sidebar.info(f"Edge: {edge:.1%}. Wait for better odds.")
+
+    except Exception as e:
+        st.error(f"Dynamical Error: {e}")
