@@ -68,11 +68,11 @@ if st.button("⚡ EXECUTE DYNAMICAL ANALYSIS"):
         
         # THE 10 FEATURE VECTOR
         feats = np.array([[
-            elo_ratings[h_team], elo_ratings[a_team],
-            h_snap['goals'], a_snap['goals'],
-            h_snap['corners'], a_snap['corners'],
-            h_snap['eff'], a_snap['eff'],
-            h_snap['btts'], a_snap['btts']
+            elo_ratings[h_team], elo_ratings[a_team], # 1, 2
+            h_snap['goals'], a_snap['goals'],         # 3, 4
+            h_snap['corners'], a_snap['corners'],     # 5, 6
+            h_snap['eff'], a_snap['eff'],             # 7, 8
+            h_snap['btts'], a_snap['btts']            # 9, 10
         ]])
 
         # Inference
