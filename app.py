@@ -103,11 +103,17 @@ if st.button("⚡ EXECUTE DYNAMICAL ANALYSIS"):
 
         # --- ROW 1: CORE PROBABILITIES ---
         st.divider()
+        
+        # FIX: Check if teams are the same
+        if h_team == a_team:
+            st.warning("⚠️ Warning: You have selected the same team for both sides. Results are for mathematical testing only.")
+
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric(f"{h_team} Win", f"{p_res[2]:.1%}")
-        m2.metric("Draw (X)", f"{p_res[1]:.1%}")
-        m3.metric(f"{a_team} Win", f"{p_res[0]:.1%}")
-        m4.metric("BTTS: YES", f"{p_btts:.1%}")
+        # FIX: Better labels so you don't get confused
+        m1.metric(f"🏠 {h_team} Win", f"{p_res[2]:.1%}")
+        m2.metric("⚖️ Draw (X)", f"{p_res[1]:.1%}")
+        m3.metric(f"🚀 {a_team} Win", f"{p_res[0]:.1%}")
+        m4.metric("⚽ BTTS: YES", f"{p_btts:.1%}")
 
         # --- ROW 2: ADVANCED MARKETS ---
         st.subheader("📊 ADVANCED PROFESSIONAL MARKETS")
@@ -174,6 +180,29 @@ if st.button("⚡ EXECUTE DYNAMICAL ANALYSIS"):
             st.info("⚖️ TIGHT MATCH: High Draw probability. Recommended: Draw No Bet (DNB) or Handicap (+0.5).")
 
         
+
+        # --- ROW 4: DYNAMICAL SCOUTING REPORT ---
+        st.subheader("📋 Professional Scouting Report")
+        s1, s2 = st.columns(2)
+        
+        with s1:
+            st.write(f"**{h_team} Offensive Efficiency**")
+            # Higher efficiency means they need FEWER shots to score.
+            h_eff_score = "Elite" if h_snap['eff'] > 0.15 else "Average"
+            st.info(f"Rating: {h_eff_score} ({h_snap['eff']:.1%})")
+            
+        with s2:
+            st.write(f"**{a_team} BTTS Trend**")
+            # High BTTS rate means they have a "leaky" defense but good attack.
+            btts_trend = "Very High" if a_snap['btts'] > 0.60 else "Stable"
+            st.info(f"Trend: {btts_trend} ({a_snap['btts']:.1%})")
+
+        # --- THE FINAL VERDICT ---
+        st.divider()
+        if p_res[2] > 0.55 and h_snap['eff'] > 0.12:
+            st.success(f"💎 HIGH CONFIDENCE: {h_team} is statistically dominant at home. Recommended: Straight Win (W1).")
+        elif p_btts > 0.65:
+            st.success("🔥 GOAL SIGNAL: Both teams show aggressive attacking patterns. Recommended: BTTS (Yes).")
 
 
         
