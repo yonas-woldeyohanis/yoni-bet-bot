@@ -63,23 +63,20 @@ with col_match2:
 
 if st.button("⚡ EXECUTE DYNAMICAL ANALYSIS"):
     try:
-        # Get Stats from Snapshot
         h_snap = team_stats[h_team]
         a_snap = team_stats[a_team]
         
-        # Build Feature Vector for AI
-        # Feature order: Elo_H, Elo_A, Conv_H, Conv_A, BTTS_H, BTTS_A
+        # THE 10 FEATURE VECTOR
         feats = np.array([[
-            elo_ratings[h_team], 
-            elo_ratings[a_team], 
-            h_snap['conv_rate'], 
-            a_snap['conv_rate'], 
-            h_snap['btts_rate'], 
-            a_snap['btts_rate']
+            elo_ratings[h_team], elo_ratings[a_team],
+            h_snap['goals'], a_snap['goals'],
+            h_snap['corners'], a_snap['corners'],
+            h_snap['eff'], a_snap['eff'],
+            h_snap['btts'], a_snap['btts']
         ]])
 
-        # Multi-Model Inference
-        p_res = brains['result'].predict_proba(feats)[0]   # [Away, Draw, Home]
+        # Inference
+        p_res = brains['result'].predict_proba(feats)[0]
         p_goals = brains['goals'].predict_proba(feats)[0][1]
         p_btts = brains['btts'].predict_proba(feats)[0][1]
         p_corn = brains['corners'].predict_proba(feats)[0][1]

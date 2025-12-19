@@ -1,46 +1,40 @@
 import pandas as pd
 import numpy as np
 
-def create_elite_features():
+def create_master_features():
     df = pd.read_csv('master_data.csv')
     df['Date'] = pd.to_datetime(df['Date'])
     
-    # Load Elo history
     elo_df = pd.read_csv('elo_history.csv')
     elo_df['Date'] = pd.to_datetime(elo_df['Date'])
     df = pd.merge(df, elo_df, on=['Date', 'HomeTeam', 'AwayTeam'])
 
-    # --- 1. DYNAMICAL GOAL FEATURES ---
-    # Both Teams to Score (BTTS)
-    df['BTTS_Actual'] = ((df['FTHG'] > 0) & (df['FTAG'] > 0)).astype(int)
+    # 1. GOAL DYNAMICS (Last 10 games)
+    df['Home_Goals_Avg'] = df.groupby('HomeTeam')['FTHG'].transform(lambda x: x.rolling(10, closed='left').mean())
+    df['Away_Goals_Avg'] = df.groupby('AwayTeam')['FTAG'].transform(lambda x: x.rolling(10, closed='left').mean())
     
-    # Rolling BTTS Rate (Last 10 games) - shows if teams play "open" football
+    # 2. CORNER DYNAMICS
+    df['Home_Corners_Avg'] = df.groupby('HomeTeam')['HC'].transform(lambda x: x.rolling(10, closed='left').mean())
+    df['Away_Corners_Avg'] = df.groupby('AwayTeam')['AC'].transform(lambda x: x.rolling(10, closed='left').mean())
+
+    # 3. EFFICIENCY (Goals per Shot)
+    df['H_Shot_Eff'] = df['Home_Goals_Avg'] / df.groupby('HomeTeam')['HS'].transform(lambda x: x.rolling(10, closed='left').mean()).replace(0, 1)
+    df['A_Shot_Eff'] = df['Away_Goals_Avg'] / df.groupby('AwayTeam')['AS'].transform(lambda x: x.rolling(10, closed='left').mean()).replace(0, 1)
+
+    # 4. BTTS DYNAMICS
+    df['BTTS_Actual'] = ((df['FTHG'] > 0) & (df['FTAG'] > 0)).astype(int)
     df['Home_BTTS_Rate'] = df.groupby('HomeTeam')['BTTS_Actual'].transform(lambda x: x.rolling(10, closed='left').mean())
     df['Away_BTTS_Rate'] = df.groupby('AwayTeam')['BTTS_Actual'].transform(lambda x: x.rolling(10, closed='left').mean())
 
-    # --- 2. QUANT xG (The "Threat" Level) ---
-    # We calculate the probability of a shot becoming a goal for each team
-    def calc_conv_rate(goals, shots):
-        return (goals.rolling(10).sum() / shots.rolling(10).sum().replace(0, 1)).shift()
-
-    df['H_Conv_Rate'] = df.groupby('HomeTeam').apply(lambda x: calc_conv_rate(x['FTHG'], x['HS'])).reset_index(0, drop=True)
-    df['A_Conv_Rate'] = df.groupby('AwayTeam').apply(lambda x: calc_conv_rate(x['FTAG'], x['AS'])).reset_index(0, drop=True)
-
-    # Current xG = Historical Conversion Rate * Shots in this match
-    # (For training, we use actual shots; for prediction, we use rolling avg shots)
-    df['H_xG'] = df['HS'] * df['H_Conv_Rate']
-    df['A_xG'] = df['AS'] * df['A_Conv_Rate']
-
-    # --- 3. TARGETS FOR MULTI-MARKET BETTING ---
+    # 5. TARGETS
     df['Target_Result'] = df['FTR'].map({'H': 2, 'D': 1, 'A': 0})
-    df['Target_Over25'] = ( (df['FTHG'] + df['FTAG']) > 2.5 ).astype(int)
+    df['Target_Over25'] = ((df['FTHG'] + df['FTAG']) > 2.5).astype(int)
     df['Target_BTTS'] = df['BTTS_Actual']
-    df['Target_Home_Over15'] = (df['FTHG'] > 1.5).astype(int) # Team specific goals
-    df['Target_Away_Over15'] = (df['FTAG'] > 1.5).astype(int)
+    df['Target_Corners10'] = ((df['HC'] + df['AC']) > 9.5).astype(int)
 
     df = df.dropna()
-    df.to_csv('elite_training_data.csv', index=False)
-    print(f"✅ Elite Training Data Created: {len(df)} matches with BTTS & xG.")
+    df.to_csv('master_training_data.csv', index=False)
+    print(f"✅ Master Matrix Created: {len(df)} matches with 10 features.")
 
 if __name__ == "__main__":
-    create_elite_features()
+    create_master_features()
